@@ -344,6 +344,35 @@ const SalaryManager = () => {
         }
     };
 
+    const updateRecord = async (id, unmappedUpdates) => {
+        // Map updates to snake_case for DB
+        const dbUpdates = {};
+        if (unmappedUpdates.date) dbUpdates.date = unmappedUpdates.date;
+        if (unmappedUpdates.hours !== undefined) dbUpdates.hours = unmappedUpdates.hours;
+        if (unmappedUpdates.strings !== undefined) dbUpdates.strings = unmappedUpdates.strings;
+        if (unmappedUpdates.salary !== undefined) dbUpdates.daily_salary = unmappedUpdates.salary;
+        if (unmappedUpdates.type) dbUpdates.type = unmappedUpdates.type;
+        if (unmappedUpdates.amount !== undefined) dbUpdates.amount = unmappedUpdates.amount;
+
+        if (isOffline) {
+            const list = records.map(r => r.id === id ? { ...r, ...unmappedUpdates } : r);
+            setRecords(list);
+            saveLocal('sm_records', list);
+        } else {
+            const { error } = await supabase
+                .from('work_records')
+                .update(dbUpdates)
+                .eq('id', id);
+
+            if (error) {
+                alert('Update failed: ' + error.message);
+                return;
+            }
+
+            setRecords(records.map(r => r.id === id ? { ...r, ...unmappedUpdates } : r));
+        }
+    };
+
     const exportData = () => {
         const headers = ['Date', 'Employee Name', 'Type', 'Hours', 'Strings', 'Salary', 'Paid Status', 'Paid Date'];
         const csvRows = [headers.join(',')];
@@ -844,6 +873,160 @@ const SalaryManager = () => {
         );
     };
 
+    const HistoryView = () => {
+        const [filterEmp, setFilterEmp] = useState('');
+        const [startDate, setStartDate] = useState('');
+        const [endDate, setEndDate] = useState('');
+        const [editingId, setEditingId] = useState(null);
+
+        // Edit State
+        const [editForm, setEditForm] = useState({
+            date: '',
+            hours: '',
+            strings: '',
+            salary: ''
+        });
+
+        const filteredRecords = records.filter(r => {
+            const empName = employees.find(e => e.id === r.employeeId)?.name || '';
+            const matchesEmp = empName.toLowerCase().includes(filterEmp.toLowerCase());
+            const matchesStart = !startDate || r.date >= startDate;
+            const matchesEnd = !endDate || r.date <= endDate;
+            return matchesEmp && matchesStart && matchesEnd;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const startEditing = (record) => {
+            setEditingId(record.id);
+            setEditForm({
+                date: record.date,
+                hours: record.hours || 0,
+                strings: record.strings || 0,
+                salary: record.salary
+            });
+        };
+
+        const handleEditChange = (field, value) => {
+            const newForm = { ...editForm, [field]: value };
+
+            // Auto-calc salary if hours/strings change
+            if (field === 'hours' || field === 'strings') {
+                const rec = records.find(r => r.id === editingId);
+                const emp = employees.find(e => e.id === rec.employeeId);
+                const rate = emp?.hourlyRate ?? settings.defaultHourlyRate;
+                const unit = settings.defaultUnitPrice;
+
+                const h = parseFloat(field === 'hours' ? value : newForm.hours) || 0;
+                const s = parseFloat(field === 'strings' ? value : newForm.strings) || 0;
+
+                newForm.salary = (h * rate + s * unit).toFixed(2);
+            }
+            setEditForm(newForm);
+        };
+
+        const saveRecordEdit = async () => {
+            const h = parseFloat(editForm.hours) || 0;
+            const s = parseFloat(editForm.strings) || 0;
+            const sal = parseFloat(editForm.salary) || 0;
+
+            let type = 'hourly';
+            let amount = h;
+            if (h > 0 && s > 0) { type = 'mixed'; amount = h + s; }
+            else if (s > 0) { type = 'piece'; amount = s; }
+
+            const updates = {
+                date: editForm.date,
+                hours: h,
+                strings: s,
+                salary: sal,
+                type: type,
+                amount: amount
+            };
+
+            await updateRecord(editingId, updates);
+            setEditingId(null);
+        };
+
+        return (
+            <div className="space-y-6">
+                <Card className="p-4">
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                        <Input label="Search Employee" value={filterEmp} onChange={e => setFilterEmp(e.target.value)} placeholder="Name..." />
+                        <Input type="date" label="From" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                        <Input type="date" label="To" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                        <div className="flex-1"></div>
+                        <Button variant="secondary" onClick={() => { setFilterEmp(''); setStartDate(''); setEndDate(''); }}>Clear Filters</Button>
+                    </div>
+                </Card>
+
+                <Card className="overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
+                                <tr>
+                                    <th className="p-4">Date</th>
+                                    <th className="p-4">Employee</th>
+                                    <th className="p-4">Content</th>
+                                    <th className="p-4">Salary</th>
+                                    <th className="p-4">Status</th>
+                                    <th className="p-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {filteredRecords.map(r => {
+                                    const emp = employees.find(e => e.id === r.employeeId);
+                                    return (
+                                        <tr key={r.id} className="hover:bg-slate-50/50">
+                                            <td className="p-4">{formatDateWithWeekday(r.date)}</td>
+                                            <td className="p-4 font-medium text-slate-700">{emp?.name || 'Unknown'}</td>
+                                            <td className="p-4">
+                                                {r.hours > 0 && <span className="mr-2">{r.hours}h</span>}
+                                                {r.strings > 0 && <span>{r.strings}pcs</span>}
+                                            </td>
+                                            <td className="p-4 font-bold text-slate-700">${r.salary.toFixed(2)}</td>
+                                            <td className="p-4">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${r.paid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {r.paid ? 'Paid' : 'Unpaid'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <button onClick={() => startEditing(r)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                                                    <Edit2 size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                                {filteredRecords.length === 0 && (
+                                    <tr>
+                                        <td colSpan="6" className="p-8 text-center text-slate-400">No records found matching filters.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+
+                {editingId && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
+                            <h3 className="text-xl font-bold text-slate-800">Edit Record</h3>
+                            <Input type="date" label="Date" value={editForm.date} onChange={e => handleEditChange('date', e.target.value)} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input type="number" label="Hours" value={editForm.hours} onChange={e => handleEditChange('hours', e.target.value)} />
+                                <Input type="number" label="Strings" value={editForm.strings} onChange={e => handleEditChange('strings', e.target.value)} />
+                            </div>
+                            <Input type="number" label="Salary (Override)" value={editForm.salary} onChange={e => handleEditChange('salary', e.target.value)} />
+                            <div className="flex justify-end gap-3 pt-4">
+                                <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+                                <Button onClick={saveRecordEdit}>Save Changes</Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const Config = () => (
         <>
             <Card className="max-w-xl mx-auto p-6">
@@ -892,6 +1075,7 @@ const SalaryManager = () => {
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: <PieChart size={18} /> },
         { id: 'entry', label: 'Work Log', icon: <Plus size={18} /> },
+        { id: 'history', label: 'History', icon: <History size={18} /> },
         { id: 'employees', label: 'Employees', icon: <Users size={18} /> },
         { id: 'settlement', label: 'Settlement', icon: <CreditCard size={18} /> },
         { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
@@ -928,6 +1112,7 @@ const SalaryManager = () => {
                 {activeTab === 'dashboard' && <Dashboard />}
                 {activeTab === 'employees' && <EmployeeManager />}
                 {activeTab === 'entry' && <WorkEntry />}
+                {activeTab === 'history' && <HistoryView />}
                 {activeTab === 'settlement' && <Settlement />}
                 {activeTab === 'settings' && <Config />}
             </div>
