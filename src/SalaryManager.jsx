@@ -437,20 +437,25 @@ const SalaryManager = () => {
     // --- Sub-Components (Tabs) ---
 
     const Dashboard = () => {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        const dateThreshold = oneWeekAgo.toISOString().split('T')[0];
+        const lastPayouts = employees.map(emp => {
+            const paidRecs = records.filter(r => r.employeeId === emp.id && r.paid && r.paidAt);
+            if (paidRecs.length === 0) return null;
 
-        const weeklySummary = employees.map(emp => {
-            const empRecs = records.filter(r => r.employeeId === emp.id && r.date >= dateThreshold);
-            if (empRecs.length === 0) return null;
+            // Find the most recent paidAt timestamp
+            const sorted = [...paidRecs].sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
+            const latestDate = sorted[0].paidAt;
+
+            // Sum records matches this specific timestamp
+            const batch = sorted.filter(r => r.paidAt === latestDate);
+            const total = batch.reduce((sum, r) => sum + r.salary, 0);
+
             return {
-                ...emp,
-                totalSalary: empRecs.reduce((sum, r) => sum + r.salary, 0),
-                totalHours: empRecs.reduce((sum, r) => sum + (r.hours || 0), 0),
-                totalStrings: empRecs.reduce((sum, r) => sum + (r.strings || 0), 0)
+                id: emp.id,
+                name: emp.name,
+                date: latestDate,
+                amount: total
             };
-        }).filter(Boolean).sort((a, b) => b.totalSalary - a.totalSalary);
+        }).filter(Boolean).sort((a, b) => new Date(b.date) - new Date(a.date));
 
         return (
             <div className="space-y-6">
@@ -495,31 +500,27 @@ const SalaryManager = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <Card className="p-6">
                         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <History className="text-slate-400" size={20} />
-                            Weekly Activity (Last 7 Days)
+                            <CheckCircle className="text-emerald-500" size={20} />
+                            Last Payouts
                         </h3>
                         <div className="space-y-4">
-                            {weeklySummary.map(emp => (
-                                <div key={emp.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                            {lastPayouts.map(payout => (
+                                <div key={payout.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold">
-                                            {getAvatarChar(emp.name)}
+                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">
+                                            {getAvatarChar(payout.name)}
                                         </div>
                                         <div>
-                                            <p className="font-medium text-slate-800">{emp.name}</p>
-                                            <p className="text-xs text-slate-500">
-                                                {emp.totalHours > 0 ? `${emp.totalHours.toFixed(2)}h ` : ''}
-                                                {emp.totalHours > 0 && emp.totalStrings > 0 ? '• ' : ''}
-                                                {emp.totalStrings > 0 ? `${emp.totalStrings} pcs` : ''}
-                                            </p>
+                                            <p className="font-medium text-slate-800">{payout.name}</p>
+                                            <p className="text-xs text-slate-500">{formatDateWithWeekday(payout.date)}</p>
                                         </div>
                                     </div>
-                                    <span className="font-bold text-indigo-600">
-                                        ${emp.totalSalary.toFixed(2)}
+                                    <span className="font-bold text-emerald-600">
+                                        ${payout.amount.toFixed(2)}
                                     </span>
                                 </div>
                             ))}
-                            {weeklySummary.length === 0 && <p className="text-slate-400 text-center py-4">No activity in the past week</p>}
+                            {lastPayouts.length === 0 && <p className="text-slate-400 text-center py-4">No payment history yet</p>}
                         </div>
                     </Card>
 
