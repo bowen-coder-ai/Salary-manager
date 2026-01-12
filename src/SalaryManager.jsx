@@ -436,93 +436,116 @@ const SalaryManager = () => {
 
     // --- Sub-Components (Tabs) ---
 
-    const Dashboard = () => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-6 border-l-4 border-l-indigo-500">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-indigo-50 rounded-full text-indigo-600">
-                            <DollarSign size={24} />
-                        </div>
-                        <div>
-                            <p className="text-sm text-slate-500 font-medium">Total Unpaid</p>
-                            <h3 className="text-2xl font-bold text-slate-800">${totalUnpaid.toFixed(2)}</h3>
-                        </div>
-                    </div>
-                </Card>
+    const Dashboard = () => {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const dateThreshold = oneWeekAgo.toISOString().split('T')[0];
 
-                <Card className="p-6 border-l-4 border-l-emerald-500">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
-                            <Users size={24} />
-                        </div>
-                        <div>
-                            <p className="text-sm text-slate-500 font-medium">Active Employees</p>
-                            <h3 className="text-2xl font-bold text-slate-800">{employees.length}</h3>
-                        </div>
-                    </div>
-                </Card>
+        const weeklySummary = employees.map(emp => {
+            const empRecs = records.filter(r => r.employeeId === emp.id && r.date >= dateThreshold);
+            if (empRecs.length === 0) return null;
+            return {
+                ...emp,
+                totalSalary: empRecs.reduce((sum, r) => sum + r.salary, 0),
+                totalHours: empRecs.reduce((sum, r) => sum + (r.hours || 0), 0),
+                totalStrings: empRecs.reduce((sum, r) => sum + (r.strings || 0), 0)
+            };
+        }).filter(Boolean).sort((a, b) => b.totalSalary - a.totalSalary);
 
-                <Card className="p-6 border-l-4 border-l-amber-500">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-amber-50 rounded-full text-amber-600">
-                            <TrendingUp size={24} />
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="p-6 border-l-4 border-l-indigo-500">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-indigo-50 rounded-full text-indigo-600">
+                                <DollarSign size={24} />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500 font-medium">Total Unpaid</p>
+                                <h3 className="text-2xl font-bold text-slate-800">${totalUnpaid.toFixed(2)}</h3>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm text-slate-500 font-medium">Work Records</p>
-                            <h3 className="text-2xl font-bold text-slate-800">{records.length}</h3>
-                        </div>
-                    </div>
-                </Card>
-            </div>
+                    </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <History className="text-slate-400" size={20} />
-                        Recent Activity
-                    </h3>
-                    <div className="space-y-4">
-                        {records.slice().reverse().slice(0, 5).map(record => {
-                            const emp = employees.find(e => e.id === record.employeeId);
-                            return (
-                                <div key={record.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
-                                    <div>
-                                        <p className="font-medium text-slate-800">{emp?.name || 'Unknown'}</p>
-                                        <p className="text-xs text-slate-500">{formatDateWithWeekday(record.date)} • {record.type === 'hourly' ? `${record.amount} hrs` : `${record.amount} pcs`}</p>
+                    <Card className="p-6 border-l-4 border-l-emerald-500">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
+                                <Users size={24} />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500 font-medium">Active Employees</p>
+                                <h3 className="text-2xl font-bold text-slate-800">{employees.length}</h3>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="p-6 border-l-4 border-l-amber-500">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-amber-50 rounded-full text-amber-600">
+                                <TrendingUp size={24} />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500 font-medium">Work Records</p>
+                                <h3 className="text-2xl font-bold text-slate-800">{records.length}</h3>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card className="p-6">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <History className="text-slate-400" size={20} />
+                            Weekly Activity (Last 7 Days)
+                        </h3>
+                        <div className="space-y-4">
+                            {weeklySummary.map(emp => (
+                                <div key={emp.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold">
+                                            {getAvatarChar(emp.name)}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-slate-800">{emp.name}</p>
+                                            <p className="text-xs text-slate-500">
+                                                {emp.totalHours > 0 ? `${emp.totalHours.toFixed(2)}h ` : ''}
+                                                {emp.totalHours > 0 && emp.totalStrings > 0 ? '• ' : ''}
+                                                {emp.totalStrings > 0 ? `${emp.totalStrings} pcs` : ''}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <span className={`font-bold ${record.paid ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                        ${record.salary.toFixed(2)}
+                                    <span className="font-bold text-indigo-600">
+                                        ${emp.totalSalary.toFixed(2)}
                                     </span>
                                 </div>
-                            );
-                        })}
-                        {records.length === 0 && <p className="text-slate-400 text-center py-4">No records yet</p>}
-                    </div>
-                </Card>
+                            ))}
+                            {weeklySummary.length === 0 && <p className="text-slate-400 text-center py-4">No activity in the past week</p>}
+                        </div>
+                    </Card>
 
-                <Card className="p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <PieChart className="text-slate-400" size={20} />
-                        Unpaid by Employee
-                    </h3>
-                    <div className="space-y-3">
-                        {employees.map(emp => {
-                            const empUnpaid = unpaidRecords.filter(r => r.employeeId === emp.id).reduce((sum, r) => sum + r.salary, 0);
-                            if (empUnpaid === 0) return null;
-                            return (
-                                <div key={emp.id} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                                    <span className="text-slate-700">{emp.name}</span>
-                                    <span className="font-mono font-medium text-slate-900">${empUnpaid.toFixed(2)}</span>
-                                </div>
-                            )
-                        })}
-                        {unpaidRecords.length === 0 && <p className="text-slate-400 text-center py-4">All caught up!</p>}
-                    </div>
-                </Card>
+                    <Card className="p-6">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <PieChart className="text-slate-400" size={20} />
+                            Unpaid by Employee
+                        </h3>
+                        <div className="space-y-3">
+                            {employees.map(emp => {
+                                const empUnpaid = unpaidRecords.filter(r => r.employeeId === emp.id).reduce((sum, r) => sum + r.salary, 0);
+                                if (empUnpaid === 0) return null;
+                                return (
+                                    <div key={emp.id} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
+                                        <span className="text-slate-700">{emp.name}</span>
+                                        <span className="font-mono font-medium text-slate-900">${empUnpaid.toFixed(2)}</span>
+                                    </div>
+                                )
+                            })}
+                            {unpaidRecords.length === 0 && <p className="text-slate-400 text-center py-4">All caught up!</p>}
+                        </div>
+                    </Card>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const EmployeeManager = () => {
         const [newName, setNewName] = useState('');
