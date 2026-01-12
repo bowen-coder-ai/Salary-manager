@@ -373,6 +373,27 @@ const SalaryManager = () => {
         }
     };
 
+    const deleteRecord = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this record?')) return;
+
+        if (isOffline) {
+            const list = records.filter(r => r.id !== id);
+            setRecords(list);
+            saveLocal('sm_records', list);
+        } else {
+            const { error } = await supabase
+                .from('work_records')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                alert('Delete failed: ' + error.message);
+                return;
+            }
+            setRecords(records.filter(r => r.id !== id));
+        }
+    };
+
     const exportData = () => {
         const headers = ['Date', 'Employee Name', 'Type', 'Hours', 'Strings', 'Salary', 'Paid Status', 'Paid Date'];
         const csvRows = [headers.join(',')];
@@ -874,7 +895,7 @@ const SalaryManager = () => {
     };
 
     const HistoryView = () => {
-        const [filterEmp, setFilterEmp] = useState('');
+        const [filterEmpId, setFilterEmpId] = useState('');
         const [startDate, setStartDate] = useState('');
         const [endDate, setEndDate] = useState('');
         const [editingId, setEditingId] = useState(null);
@@ -888,8 +909,7 @@ const SalaryManager = () => {
         });
 
         const filteredRecords = records.filter(r => {
-            const empName = employees.find(e => e.id === r.employeeId)?.name || '';
-            const matchesEmp = empName.toLowerCase().includes(filterEmp.toLowerCase());
+            const matchesEmp = !filterEmpId || r.employeeId === filterEmpId;
             const matchesStart = !startDate || r.date >= startDate;
             const matchesEnd = !endDate || r.date <= endDate;
             return matchesEmp && matchesStart && matchesEnd;
@@ -950,11 +970,29 @@ const SalaryManager = () => {
             <div className="space-y-6">
                 <Card className="p-4">
                     <div className="flex flex-col md:flex-row gap-4 items-end">
-                        <Input label="Search Employee" value={filterEmp} onChange={e => setFilterEmp(e.target.value)} placeholder="Name..." />
+                        <div className="flex flex-col gap-1.5 flex-1">
+                            <label className="text-sm font-medium text-slate-600">Employee</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all bg-white appearance-none cursor-pointer"
+                                    value={filterEmpId}
+                                    onChange={e => setFilterEmpId(e.target.value)}
+                                >
+                                    <option value="">All Employees</option>
+                                    {employees.map(e => (
+                                        <option key={e.id} value={e.id}>{e.name}</option>
+                                    ))}
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                    <ChevronDown size={16} />
+                                </div>
+                            </div>
+                        </div>
                         <Input type="date" label="From" value={startDate} onChange={e => setStartDate(e.target.value)} />
                         <Input type="date" label="To" value={endDate} onChange={e => setEndDate(e.target.value)} />
-                        <div className="flex-1"></div>
-                        <Button variant="secondary" onClick={() => { setFilterEmp(''); setStartDate(''); setEndDate(''); }}>Clear Filters</Button>
+                        <div className="flex-none">
+                            <Button variant="secondary" onClick={() => { setFilterEmpId(''); setStartDate(''); setEndDate(''); }} className="mb-0.5">Clear</Button>
+                        </div>
                     </div>
                 </Card>
 
@@ -989,9 +1027,14 @@ const SalaryManager = () => {
                                                 </span>
                                             </td>
                                             <td className="p-4 text-right">
-                                                <button onClick={() => startEditing(r)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
-                                                    <Edit2 size={16} />
-                                                </button>
+                                                <div className="flex justify-end gap-1">
+                                                    <button onClick={() => startEditing(r)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors" title="Edit">
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button onClick={() => deleteRecord(r.id)} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg text-slate-400 transition-colors" title="Delete">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     )
